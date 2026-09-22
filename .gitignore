@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Build
+detection/build/
+
+# Data and outputs (regenerated; see README)
+/data
+/results/
+/figures/
+/_nc_tmp/
+
+# OS / editor
+.DS_Store
+.vscode/

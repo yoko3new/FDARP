@@ -1,0 +1,26 @@
+# Configuration for full-disk AR / PIL detection.
+# Adapted from SuryaBench ar_segmentation (Jinsu Hong, Ziba Khani, Berkay Aydin,
+# Chetraj Pandey, DMLAB, Georgia State University).
+#
+# Paths are relative to the directory the binary is run from (detection/).
+
+parameters:
+  pos_gauss: 50
+  neg_gauss: -50
+  low_threshold: 0.0
+  high_threshold: 0.0
+  dilation_size: 10
+  gap_size: 4              # read but not used by the current code
+  size_threshold: 100
+  pil_threshold: 14
+  strength_threshold: 1.0
+  limb_mode: radius_frac   # none | formula | radius_px | radius_frac | angle
+  limb_value: 1.00         # meaning depends on limb_mode
+  measure_disk: true       # measure disk centre/radius per frame
+  disk_threshold: 1.0      # |B| (G) above which a pixel counts as on-disk
+  limb_rsun_px: 1625.4     # fallback radius if the measurement fails
+
+directories:
+  data_dir: "../data/fits/"
+  output_dir: "../results/detections/limb/"
+  log_dir: "../results/logs/limb/"
