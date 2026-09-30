@@ -16,9 +16,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import paths
-from association import nearest_on_surface
-from solar_utils import (advance_longitudes, frames_for_day, is_visible,
-                         load_frame, parse_srs, require_srs, parse_date)
+from association import associate_frame
+from solar_utils import (frames_for_day, load_frame, parse_srs, require_srs,
+                         parse_date)
 
 THRESHOLDS = (0.5, 1, 2, 3, 4, 5, 7, 10, 15)
 
@@ -27,15 +27,9 @@ def frame_distances(date, time, srs_regions, args):
     frame = load_frame(date, time, args.fits_root, args.h5_dir)
     if frame is None or frame["mask"] is None:
         return []
-    hours = int(time[:2]) + int(time[2:]) / 60.0
-    rows = []
-    for r in advance_longitudes(srs_regions, hours):
-        if not is_visible(r["lat"], r["lon"], frame["b0"]):
-            continue
-        _, _, d = nearest_on_surface(frame["mask"], r["lat"], r["lon"], frame["r_px"],
-                                     frame["cx"], frame["cy"], frame["b0"], args.subsample)
-        rows.append(dict(r, time=time, dist=d))
-    return rows
+    association = associate_frame(frame, srs_regions, subsample=args.subsample)
+    return [dict(r, time=time, dist=association["nearest"][r["number"]][2])
+            for r in association["regions"]]
 
 
 def rate_table(rows, thresholds=THRESHOLDS):
@@ -55,7 +49,8 @@ def main():
     ap.add_argument("--srs-file")
     ap.add_argument("--fits-root", default=str(paths.FITS))
     ap.add_argument("--h5-dir", default=str(paths.detection_dir("limb")))
-    ap.add_argument("--subsample", type=int, default=4)
+    ap.add_argument("--subsample", type=int, default=1,
+                    help="sample every Nth pixel per component (1 = exact)")
     ap.add_argument("--plot", action="store_true")
     ap.add_argument("--out", default=str(paths.FIG_DIAG / "srs_distance.png"))
     args = ap.parse_args()

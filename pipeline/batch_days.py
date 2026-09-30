@@ -28,7 +28,8 @@ def main():
     ap.add_argument("--fits-root", default=str(paths.FITS))
     ap.add_argument("--h5-dir", default=str(paths.detection_dir("limb")))
     ap.add_argument("--threshold", type=float, default=3.0, help="degrees")
-    ap.add_argument("--subsample", type=int, default=4)
+    ap.add_argument("--subsample", type=int, default=1,
+                    help="sample every Nth pixel per component (1 = exact)")
     args = ap.parse_args()
 
     start = f"{parse_date(args.start):%Y%m%d}" if args.start else None

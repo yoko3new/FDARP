@@ -80,8 +80,18 @@ takes `YYYYMMDD` (the name of the data folder).
   mean different things across the disk.
 - **SRS positions** are valid at 00:00 UT; for later frames longitudes are
   advanced at 13.2 deg/day. The B0 angle is computed per frame with SunPy.
+- **NOAA numbers**: SRS reports show only four digits. For the validated
+  2012-2015 archive, the parser adds 10000 and keeps both the original
+  `srs_number` (including leading zeros) and full integer `noaa_ar`, along
+  with `srs_date`. The existing `number` field is the full number as a string,
+  so figures and tables display full IDs. Dates outside this range fail until
+  their numbering epoch is checked. See the [NOAA SRS format description](https://www.ngdc.noaa.gov/stp/space-weather/swpc-products/daily_reports/solar_region_summaries/docs/SolarRegionSummary.pdf).
 - **Groups**: `1:1`, `1:N` (one component, several regions), `N:1`, `M:N`,
   `1:0` (component without a NOAA region), `0:1` (region not detected).
+- **Future tracking**: use a separate `track_id` for detected trajectories and
+  store all associated NOAA IDs for each observation. One detected component
+  can cover more than one NOAA region; its trajectory should not be split
+  solely to force a one-to-one NOAA mapping.
 
 ## License
 

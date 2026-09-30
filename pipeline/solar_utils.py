@@ -7,6 +7,7 @@ are great-circle distances on the solar surface, not pixel distances: 100 px is
 """
 
 import re
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,11 @@ C_CUT = "white"        # limb-cut radius
 ROTATION_DEG_PER_DAY = 13.2
 
 _LOCATION_RE = re.compile(r"^([NS])(\d{1,2})([EW])(\d{1,3})$")
+_ISSUED_RE = re.compile(r"^:Issued:\s*(\d{4}\s+[A-Za-z]{3}\s+\d{1,2})\b")
+
+# NOAA SRS retains only four digits. This is the verified numbering epoch for
+# the project's 2012-2015 SRS archive; other epochs need their own validation.
+_NOAA_NUMBER_RANGES = ((date(2012, 1, 1), date(2015, 12, 31), 10000),)
 
 
 def parse_date(s):
@@ -50,22 +56,45 @@ def parse_location(loc):
     return lat, lon
 
 
+def resolve_noaa_ar(srs_number, report_date):
+    """Return the full NOAA AR number for a calibrated SRS report date."""
+    if not re.fullmatch(r"\d{4}", srs_number):
+        raise ValueError(f"expected a four-digit SRS number, got {srs_number!r}")
+    for first, last, offset in _NOAA_NUMBER_RANGES:
+        if first <= report_date <= last:
+            return offset + int(srs_number)
+    raise ValueError(f"NOAA number reconstruction is not calibrated for "
+                     f"{report_date:%Y-%m-%d}")
+
+
 def parse_srs(path):
     """
     Parse sections I (regions with sunspots) and IA (plages) of an SRS file.
     Section II lists regions still behind the east limb and is skipped.
 
-    Returns dicts with number, lat, lon, section, area, ll, mag. Section I rows:
+    Returns dicts with the original srs_number, integer noaa_ar, srs_date,
+    and number (a string alias of noaa_ar for existing plots and tables),
+    plus lat, lon, section, area, ll, mag. Section I rows:
         Nmbr Location Lo Area Z LL NN MagType
         2192 S13E43   251 1560 Fkc 22 32 Beta-Gamma-Delta
     Positions are valid at 00:00 UT of the report date.
     """
     regions = []
     section = None
+    report_date = None
     with open(path, "r", errors="ignore") as fh:
         for raw in fh:
             s = raw.strip()
             if not s:
+                continue
+            if s.startswith(":Issued:"):
+                m = _ISSUED_RE.match(s)
+                if m is None:
+                    raise ValueError(f"invalid SRS issue date in {path}: {s}")
+                try:
+                    report_date = datetime.strptime(m.group(1), "%Y %b %d").date()
+                except ValueError as exc:
+                    raise ValueError(f"invalid SRS issue date in {path}: {s}") from exc
                 continue
             if s.startswith("I.") and "Sunspot" in s:
                 section = "I"
@@ -85,8 +114,13 @@ def parse_srs(path):
             loc = parse_location(parts[1])
             if loc is None:
                 continue
+            if report_date is None:
+                raise ValueError(f"missing SRS issue date before regions in {path}")
+            noaa_ar = resolve_noaa_ar(parts[0], report_date)
 
-            r = {"number": parts[0], "lat": loc[0], "lon": loc[1],
+            r = {"number": str(noaa_ar), "srs_number": parts[0],
+                 "noaa_ar": noaa_ar, "srs_date": f"{report_date:%Y%m%d}",
+                 "lat": loc[0], "lon": loc[1],
                  "section": section, "area": None, "ll": None, "mag": None}
             if section == "I":
                 if len(parts) >= 4 and parts[3].isdigit():
@@ -96,6 +130,8 @@ def parse_srs(path):
                 if len(parts) >= 8:
                     r["mag"] = " ".join(parts[7:])
             regions.append(r)
+    if report_date is None:
+        raise ValueError(f"missing SRS issue date in {path}")
     return regions
 
 

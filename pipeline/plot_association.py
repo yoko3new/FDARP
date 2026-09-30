@@ -17,10 +17,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import paths
-from association import nearest_on_surface
-from solar_utils import (C_DETECT, C_LIMB, C_PLAGE, C_SPOT, advance_longitudes,
-                         frames_for_day, latlon_to_pixel, load_frame, parse_srs,
-                         require_srs, parse_date)
+from association import associate_frame
+from solar_utils import (C_DETECT, C_LIMB, C_PLAGE, C_SPOT, frames_for_day,
+                         load_frame, parse_srs, require_srs, parse_date)
 
 
 def draw_panel(ax, frame, regions, nearest, threshold, vlim):
@@ -62,15 +61,9 @@ def make_figure(date, time, srs_regions, args):
         print(f"skip {date}_{time}: missing input")
         return None
 
-    hours = int(time[:2]) + int(time[2:]) / 60.0
-    regions = advance_longitudes(srs_regions, hours)
-    xs, ys, vis = latlon_to_pixel([r["lat"] for r in regions],
-                                  [r["lon"] for r in regions],
-                                  frame["r_px"], frame["cx"], frame["cy"], frame["b0"])
-    shown = [dict(r, x=x, y=y) for r, x, y, v in zip(regions, xs, ys, vis) if v]
-    nearest = [nearest_on_surface(frame["mask"], r["lat"], r["lon"], frame["r_px"],
-                                  frame["cx"], frame["cy"], frame["b0"], args.subsample)
-               for r in shown]
+    association = associate_frame(frame, srs_regions, subsample=args.subsample)
+    shown = association["regions"]
+    nearest = [association["nearest"][r["number"]] for r in shown]
 
     fig, axes = plt.subplots(1, 2, figsize=(22, 11.5))
     res = [draw_panel(ax, frame, shown, nearest, thr, args.vlim)
@@ -96,7 +89,8 @@ def main():
     ap.add_argument("--h5-dir", default=str(paths.detection_dir("limb")))
     ap.add_argument("--thr-left", type=float, default=2.0)
     ap.add_argument("--thr-right", type=float, default=3.0)
-    ap.add_argument("--subsample", type=int, default=4)
+    ap.add_argument("--subsample", type=int, default=1,
+                    help="sample every Nth pixel per component (1 = exact)")
     ap.add_argument("--out-dir", default=str(paths.FIG_ASSOC))
     ap.add_argument("--vlim", type=float, default=200.0)
     args = ap.parse_args()

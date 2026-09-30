@@ -42,7 +42,9 @@ current directory, and paths in it are relative to `detection/`):
 - Input: `../data/fits/<YYYYMMDD>/*.magnetogram.fits`
 - Output: `../results/detections/limb/<YYYYMMDD>/*.h5`, with datasets
   `union_with_intersect` (AR mask) and `intersection` (PIL region)
-- Existing output files are skipped.
+- Each run recomputes the selected date and replaces existing output files after
+  each frame finishes. Use a different `output_dir` in `config.yaml` to keep
+  results from multiple parameter settings.
 
 ## Configuration
 

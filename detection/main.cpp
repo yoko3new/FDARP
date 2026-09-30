@@ -520,11 +520,8 @@ bool compute_main(const std::string &filename, const std::string &out_dir,
                   std::ofstream &logfile, const Config &config)
 {
     std::string output_fn_path = get_output_file_name(filename, out_dir);
-    if (std::filesystem::exists(output_fn_path))
-    {
-        std::cout << "File exists, skipping.\n";
-        return true;
-    }
+    // Write to a temporary file so a failed rerun leaves the previous result intact.
+    std::string tmp_output_fn_path = output_fn_path + ".tmp";
 
     DBG("compute_main: start");
 
@@ -590,7 +587,7 @@ bool compute_main(const std::string &filename, const std::string &out_dir,
 
     try
     {
-        H5::H5File h5_fid = io::create_h5_file(output_fn_path);
+        H5::H5File h5_fid = io::create_h5_file(tmp_output_fn_path);
         DBG("  h5 created");
 
         std::unordered_map<std::string, std::string> metadata = io::read_header(filename);
@@ -653,15 +650,17 @@ bool compute_main(const std::string &filename, const std::string &out_dir,
         DBG("  rasters written");
 
         io::close_hdf5(h5_fid);
+        // Replace the old result only after the new HDF5 file is complete.
+        fs::rename(tmp_output_fn_path, output_fn_path);
     }
     catch (...)
     {
         // HDF5 handles are closed before removing this frame's partial output.
         std::error_code ec;
-        fs::remove(output_fn_path, ec);
+        fs::remove(tmp_output_fn_path, ec);
         if (ec)
         {
-            const std::string message = "Failed to remove partial output " + output_fn_path + ": " + ec.message();
+            const std::string message = "Failed to remove partial output " + tmp_output_fn_path + ": " + ec.message();
             std::cerr << message << std::endl;
             writeToLog(logfile, message);
         }

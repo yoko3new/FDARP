@@ -24,7 +24,7 @@ from solar_utils import (advance_longitudes, great_circle_deg, latlon_to_pixel,
 CLASSES = ("1:1", "1:N", "N:1", "M:N", "1:0", "0:1")
 
 
-def nearest_on_surface(mask, lat0, lon0, r_px, cx, cy, b0, subsample=4):
+def nearest_on_surface(mask, lat0, lon0, r_px, cx, cy, b0, subsample=1):
     """
     Nearest mask pixel to a heliographic position.
     Returns (x_px, y_px, dist_deg); dist is inf for an empty mask.
@@ -43,15 +43,23 @@ def nearest_on_surface(mask, lat0, lon0, r_px, cx, cy, b0, subsample=4):
     return int(xs[k]), int(ys[k]), float(d[k])
 
 
-def component_distances(labels, ncomp, lat0, lon0, r_px, cx, cy, b0, subsample=4):
-    """Great-circle distance (deg) from a position to every component: {label: deg}."""
+def component_nearest(labels, ncomp, lat0, lon0, r_px, cx, cy, b0,
+                      subsample=1, component_ids=None):
+    """Nearest on-disk pixel for each component: {label: (x, y, degrees)}."""
     out = {}
-    for idx in range(1, ncomp):
-        _, _, d = nearest_on_surface(labels == idx, lat0, lon0,
-                                     r_px, cx, cy, b0, subsample)
-        if np.isfinite(d):
-            out[idx] = d
+    for idx in (range(1, ncomp) if component_ids is None else component_ids):
+        hit = nearest_on_surface(labels == idx, lat0, lon0,
+                                 r_px, cx, cy, b0, subsample)
+        if np.isfinite(hit[2]):
+            out[idx] = hit
     return out
+
+
+def component_distances(labels, ncomp, lat0, lon0, r_px, cx, cy, b0, subsample=1):
+    """Great-circle distance (deg) from a position to every component."""
+    return {idx: hit[2] for idx, hit in
+            component_nearest(labels, ncomp, lat0, lon0, r_px, cx, cy, b0,
+                              subsample).items()}
 
 
 def build_groups(links, comp_ids, region_ids):
@@ -99,7 +107,7 @@ def classify(group):
     return "M:N"
 
 
-def associate_frame(frame, srs_regions, threshold_deg=3.0, subsample=4,
+def associate_frame(frame, srs_regions, threshold_deg=3.0, subsample=1,
                     rotate=True, min_area=0):
     """
     Associate one frame (from solar_utils.load_frame) with SRS regions.
@@ -123,11 +131,14 @@ def associate_frame(frame, srs_regions, threshold_deg=3.0, subsample=4,
 
     comp_ids = [i for i in range(1, ncomp)
                 if stats[i, cv2.CC_STAT_AREA] >= min_area]
-    links, dists = [], {}
+    links, dists, nearest = [], {}, {}
     for r in visible:
-        dd = component_distances(labels, ncomp, r["lat"], r["lon"],
-                                 r_px, cx, cy, b0, subsample)
+        hits = component_nearest(labels, ncomp, r["lat"], r["lon"],
+                                 r_px, cx, cy, b0, subsample, comp_ids)
+        dd = {idx: hit[2] for idx, hit in hits.items()}
         dists[r["number"]] = dd
+        nearest[r["number"]] = min(hits.values(), key=lambda hit: hit[2],
+                                   default=(None, None, np.inf))
         links += [(c, r["number"]) for c, d in dd.items()
                   if d <= threshold_deg and c in comp_ids]
 
@@ -137,5 +148,6 @@ def associate_frame(frame, srs_regions, threshold_deg=3.0, subsample=4,
         counts[classify(g)] += 1
 
     return {"labels": labels, "stats": stats, "comp_ids": comp_ids,
-            "regions": visible, "distances": dists, "groups": groups,
+            "regions": visible, "distances": dists, "nearest": nearest,
+            "groups": groups,
             "counts": dict(counts)}
